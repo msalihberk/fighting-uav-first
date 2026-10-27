@@ -1,0 +1,7 @@
+std_msgs/Header header
+float64 center_x
+float64 center_y
+float64 width
+float64 height
+float64 img_width
+float64 img_height

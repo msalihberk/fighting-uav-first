@@ -1,0 +1,8 @@
+float64 center_x
+float64 center_y
+float64 img_width
+float64 img_height
+---
+bool success
+float64 angle
+geometry_msgs/Point target_point

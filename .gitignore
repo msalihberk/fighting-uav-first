@@ -1,10 +1,15 @@
 devel/
 logs/
 build/
+install/
+log/
 bin/
 lib/
+log/*
+install/*
 msg_gen/
 srv_gen/
+.vscode/
 msg/*Action.msg
 msg/*ActionFeedback.msg
 msg/*ActionGoal.msg
