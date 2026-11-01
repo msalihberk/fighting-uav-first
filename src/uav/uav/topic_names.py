@@ -6,3 +6,6 @@ class TopicNames:
     COORDINATE_CAL_TOPIC = "/uav/service/coordinates"
     ANGLE_CAL_TOPIC = "/uav/service/angle"
     IDLE_MODE_TOPIC = "/uav/service/idle"
+    CAM_YAW_PUBLISHER_TOPIC = "/uav/data/cam/yaw"
+    GET_VEL_VALUES = "/uav/service/velocity"
+    TARGET_FOUND_TOPIC = "/uav/data/target_found"

@@ -20,6 +20,12 @@ class UAVCamController(Node):
             10,
         )
 
+        self.yaw_publisher = self.create_publisher(
+            Float64,
+            TopicNames.CAM_YAW_PUBLISHER_TOPIC,
+            qos_profile=qos_profile_sensor_data
+        )
+
         self.img_subscription = self.create_subscription(
             CamData,
             TopicNames.CAM_DATA_TOPIC,
@@ -27,7 +33,7 @@ class UAVCamController(Node):
             qos_profile=qos_profile_sensor_data,
         )
 
-        self.pid_controller = PIDController(kp=0.5, ki=0.02, kd=0.4, max_integral=10.0, max_output=15.0)
+        self.pid_controller = PIDController(kp=0.4, ki=0.1, kd=0.7, max_integral=10.0, max_output=15.0)
         self.current_yaw = 0.0
         self.max_yaw = 30.0
         self.found = True
@@ -47,6 +53,12 @@ class UAVCamController(Node):
         correction = self.pid_controller.calculate(target_yaw, self.current_yaw)
         self.current_yaw = self.clamp_yaw(self.current_yaw + correction)
         self.set_angle(self.current_yaw)
+        self.send_yaw_data()
+
+    def send_yaw_data(self):
+        msg = Float64()
+        msg.data = self.current_yaw
+        self.yaw_publisher.publish(msg)
 
     def clamp_yaw(self, yaw):
         return max(-self.max_yaw, min(self.max_yaw, yaw))

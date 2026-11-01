@@ -5,3 +5,4 @@ float64 width
 float64 height
 float64 img_width
 float64 img_height
+bool found

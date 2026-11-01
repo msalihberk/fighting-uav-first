@@ -29,7 +29,7 @@ class UAVImageProcessor(Node):
         self.area_treshold = 2.0
 
     def get_data(self, center_x: float, center_y: float, width: float, 
-                 height: float, img_height: float, img_width: float):
+                 height: float, img_height: float, img_width: float, found: bool):
         msg = CamData()
         msg.center_x = center_x
         msg.center_y = center_y
@@ -37,12 +37,13 @@ class UAVImageProcessor(Node):
         msg.height = height
         msg.img_width = img_width
         msg.img_height = img_height
+        msg.found = found
         msg.header.stamp = self.get_clock().now().to_msg()
 
         return msg
 
     def empty_data(self):
-        msg = self.get_data(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        msg = self.get_data(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, False)
         msg.header.stamp = Time().to_msg()
 
         return msg
@@ -76,7 +77,7 @@ class UAVImageProcessor(Node):
                 
 
                 data_msg = self.get_data(center_x = center_x, center_y = center_y, width = float(x1 + x2), 
-                                         height = float(y1 + y2), img_height = float(img_height), img_width = float(img_width))
+                                         height = float(y1 + y2), img_height = float(img_height), img_width = float(img_width), found = True)
 
         self.data_publisher.publish(data_msg)
 

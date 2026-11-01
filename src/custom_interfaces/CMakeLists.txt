@@ -10,7 +10,7 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "srv/MovePoint.srv"
+  "srv/Velocity.srv"
   "srv/Coordinate.srv"
   "srv/Float64.srv"
   "msg/CamData.msg"

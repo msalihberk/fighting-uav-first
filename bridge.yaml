@@ -1,8 +1,8 @@
-- gz_topic_name: "/world/iris_runway/model/iris_with_gimbal/model/gimbal/link/pitch_link/sensor/camera/image"
+- gz_topic_name: "/uav/camera"
   ros_topic_name: "/uav/sensor/cam"
   ros_type_name: "sensor_msgs/msg/Image"
   gz_type_name: "gz.msgs.Image"
-  direction: BIDIRECTIONAL
+  direction: GZ_TO_ROS
 
 - gz_topic_name: "/datasets/image_raw"
   ros_topic_name: "/datasets/image_raw"
