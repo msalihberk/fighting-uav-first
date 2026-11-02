@@ -10,7 +10,6 @@ import os
 from ultralytics import YOLO
 import cv_bridge
 import cv2
-import numpy as np
 
 class UAVImageProcessor(Node):
     def __init__(self):
@@ -51,6 +50,7 @@ class UAVImageProcessor(Node):
     def process(self, msg):
         frame = cv_bridge.CvBridge().imgmsg_to_cv2(msg)
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame = cv2.resize(frame, (640, 640))
 
         prediction = self.model.predict(frame)
 

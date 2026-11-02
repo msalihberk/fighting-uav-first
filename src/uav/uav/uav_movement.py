@@ -8,6 +8,8 @@ from sensor_msgs.msg import Imu
 from custom_interfaces.srv import Velocity
 from uav.topic_names import TopicNames
 from uav.math_funcs import MathFuncs
+from filterpy.kalman import KalmanFilter
+import numpy as np
 
 class UAVMovement(Node):
     def __init__(self):
@@ -41,8 +43,18 @@ class UAVMovement(Node):
         self.x_speed = 5.0
         self.y_speed = 5.0
 
+        self.k_filter = KalmanFilter(dim_x=4, dim_z=2)
+
+        self.k_filter.F = np.array([[1, 0, 1, 0], [0, 0, 0, 1]])
+
+        self.k_filter.H = np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
+
+        self.k_filter.x = np.array([[300], [200], [0], [0]])
+
     def get_velocity(self, msg: CamData):
+        self.k_filter.predict()
         if msg.found:
+            self.k_filter.update(np.array([[msg.center_x], [msg.center_y]]))
             request = Velocity.Request()
             request.width = msg.width
             request.height = msg.height
@@ -57,6 +69,9 @@ class UAVMovement(Node):
                 self.save_vel_data(response.vel.linear.x, response.vel.linear.y)
             else:
                 self.get_logger().error("Failed to call service for velocity calculation.")
+
+        p_x = self.k_filter.x[0, 0]
+        p_y = self.k_filter.x[1, 0]
 
 
     def save_vel_data(self, x, y):
