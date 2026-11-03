@@ -58,17 +58,24 @@ class UAVMovement(Node):
         self.k_filter = KalmanFilter(dim_x=4, dim_z=2)
 
         self.target_pose = PoseStamped()
+        self.locked = False
+
+        self.circle_speed = 0.5
+        self.circle_time = 0.0
 
     def save_gps_data(self, msg):
         self.current_gps = msg
 
     def get_coordinates(self, msg: CamData):
+        if self.locked and not msg.found:
+            return
         angle_error_yaw = 0.0
         angle_error_pitch = 0.0
 
         self.k_filter.predict()
 
         if msg.found:
+            self.locked = False
             observation = np.array([[float(msg.center_x)], [float(msg.center_y)]])
             self.k_filter.update(observation)
 
@@ -131,9 +138,23 @@ class UAVMovement(Node):
         self.target_pose.pose.position.y = target_longitude
         self.target_pose.pose.position.z = target_altitude
 
-    def save_vel_data(self, x, y):
-        self.x_speed = x
-        self.y_speed = y
+    def circle(self):
+        if not self.locked:
+            self.circle_time = self.get_clock().now().nanoseconds / 1e9
+            self.locked = True
+
+        r = 5.0
+        x_center = self.current_gps.latitude - r
+        y_center = self.current_gps.longitude
+
+        elapsed_time = self.get_clock().now().nanoseconds / 1e9 - self.circle_time
+
+        x = x_center + r * math.cos(elapsed_time * self.circle_speed)
+        y = y_center + r * math.sin(elapsed_time * self.circle_speed)
+
+        self.target_pose.pose.position.x = x
+        self.target_pose.pose.position.y = y
+        self.target_pose.pose.position.z = self.current_gps.altitude
 
     def move_callback(self):  
         self.target_pose.header.stamp = self.get_clock().now().to_msg()
