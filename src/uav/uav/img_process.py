@@ -58,6 +58,9 @@ class UAVImageProcessor(Node):
 
         img_height, img_width, _ = frame.shape
 
+        data_msg.img_height = float(img_height)
+        data_msg.img_width = float(img_width)
+
         if len(prediction) >= 0:
             for target in prediction:
                 if len(target.boxes) <= 0:
