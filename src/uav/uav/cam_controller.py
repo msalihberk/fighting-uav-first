@@ -8,6 +8,7 @@ from std_msgs.msg import Float64
 from custom_interfaces.msg import CamData
 from uav.pid_controller import PIDController
 from uav.topic_names import TopicNames
+from uav.math_funcs import MathFuncs
 
 
 class UAVCamController(Node):
@@ -48,7 +49,7 @@ class UAVCamController(Node):
             self.pid_controller.reset()
             self.found = True
 
-        angle_error = self.calculate_angle(msg.center_x, msg.img_width)
+        angle_error = MathFuncs.calculate_angle_error(msg.center_x, msg.img_width)
         target_yaw = self.current_yaw + angle_error
         correction = self.pid_controller.calculate(target_yaw, self.current_yaw)
         self.current_yaw = self.clamp_yaw(self.current_yaw + correction)
@@ -62,13 +63,6 @@ class UAVCamController(Node):
 
     def clamp_yaw(self, yaw):
         return max(-self.max_yaw, min(self.max_yaw, yaw))
-
-    def calculate_angle(self, center_x, img_width):
-        pixel_error = center_x - (img_width / 2.0)
-        angle = pixel_error / img_width * 1.047
-        angle *= -1
-
-        return math.degrees(angle)
 
     def set_angle(self, new_yaw):
         msg = Float64()

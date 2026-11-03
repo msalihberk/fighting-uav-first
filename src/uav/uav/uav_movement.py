@@ -2,22 +2,23 @@ import math
 from custom_interfaces.msg import CamData
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import PoseStamped
 from rclpy.qos import qos_profile_sensor_data
-from sensor_msgs.msg import Imu
+from sensor_msgs.msg import Imu, NavSatFix
 from custom_interfaces.srv import Velocity
+from uav.pid_controller import PIDController
 from uav.topic_names import TopicNames
 from uav.math_funcs import MathFuncs
-from filterpy.kalman import KalmanFilter
+from uav.kalman_filter import KalmanFilter
 import numpy as np
 
 class UAVMovement(Node):
     def __init__(self):
         super().__init__("UAVMovement")
 
-        self.vel_publisher = self.create_publisher(
-            TwistStamped, 
-            "/mavros/setpoint_velocity/cmd_vel", 
+        self.pose_publisher = self.create_publisher(
+            PoseStamped, 
+            "/mavros/setpoint_position/local", 
             10
         )
 
@@ -28,10 +29,17 @@ class UAVMovement(Node):
             qos_profile=qos_profile_sensor_data
         )
 
+        self.gps_subscripter = self.create_subscription(
+            NavSatFix,
+            "/mavros/global_position/global",
+            self.save_gps_data,
+            qos_profile=qos_profile_sensor_data
+        )
+
         self.img_subscripter = self.create_subscription(
             CamData,
             TopicNames.CAM_DATA_TOPIC,
-            self.get_velocity,
+            self.get_coordinates,
             qos_profile=qos_profile_sensor_data
         )
 
@@ -39,22 +47,31 @@ class UAVMovement(Node):
 
         self.timer_period = 0.1
         self.move_timer = self.create_timer(self.timer_period, self.move_callback)
-
+        self.imu_data = Imu()
+        self.current_gps = NavSatFix()
         self.x_speed = 5.0
         self.y_speed = 5.0
+        self.speed_pid = PIDController(kp=0.5, ki=0.1, kd=0.2, max_integral=10.0, max_output=10.0)
+        self.pitch_pid = PIDController(kp=0.5, ki=0.1, kd=0.2, max_integral=10.0, max_output=10.0)
+        self.yaw_pid = PIDController(kp=0.5, ki=0.1, kd=0.2, max_integral=10.0, max_output=10.0)
 
         self.k_filter = KalmanFilter(dim_x=4, dim_z=2)
 
-        self.k_filter.F = np.array([[1, 0, 1, 0], [0, 0, 0, 1]])
+        self.target_pose = PoseStamped()
 
-        self.k_filter.H = np.array([[1, 0, 0, 0], [0, 1, 0, 0]])
+    def save_gps_data(self, msg):
+        self.current_gps = msg
 
-        self.k_filter.x = np.array([[300], [200], [0], [0]])
+    def get_coordinates(self, msg: CamData):
+        angle_error_yaw = 0.0
+        angle_error_pitch = 0.0
 
-    def get_velocity(self, msg: CamData):
         self.k_filter.predict()
+
         if msg.found:
-            self.k_filter.update(np.array([[msg.center_x], [msg.center_y]]))
+            observation = np.array([[float(msg.center_x)], [float(msg.center_y)]])
+            self.k_filter.update(observation)
+
             request = Velocity.Request()
             request.width = msg.width
             request.height = msg.height
@@ -73,21 +90,54 @@ class UAVMovement(Node):
         p_x = self.k_filter.x[0, 0]
         p_y = self.k_filter.x[1, 0]
 
+        pixel_data_yaw = lambda x: MathFuncs.calculate_angle_error(x, msg.img_width)
+        angle_error_yaw = pixel_data_yaw(msg.center_x) if msg.found else pixel_data_yaw(p_x)
+        angle_error_yaw = math.radians(angle_error_yaw)
+
+        pixel_data_pitch = lambda y: MathFuncs.calculate_angle_error_y(y, msg.img_height)
+        angle_error_pitch = pixel_data_pitch(msg.center_y) if msg.found else pixel_data_pitch(p_y)
+        angle_error_pitch = math.radians(angle_error_pitch)
+
+        yaw_rad = MathFuncs.get_yaw_from_quaternion(self.imu_data.orientation)
+        pitch_rad = MathFuncs.quaternion_to_pitch(self.imu_data.orientation)
+
+        bearing = (yaw_rad + angle_error_yaw) % (2 * math.pi)
+        elevation = pitch_rad + angle_error_pitch
+
+        lat1 = math.radians(self.current_gps.latitude)
+        lon1 = math.radians(self.current_gps.longitude)
+        alt1 = self.current_gps.altitude
+
+        virtual_distance = 100.0
+        R = 6378137.0             # WGS-84 Earth radius (meters)
+
+        horizontal_dist = virtual_distance * math.cos(elevation)
+
+        lat2 = math.asin(math.sin(lat1) * math.cos(horizontal_dist / R) +
+                         math.cos(lat1) * math.sin(horizontal_dist / R) * math.cos(bearing))
+        
+        lon2 = lon1 + math.atan2(math.sin(bearing) * math.sin(horizontal_dist / R) * math.cos(lat1),
+                                 math.cos(horizontal_dist / R) - math.sin(lat1) * math.sin(lat2))
+
+        vertical_dist = virtual_distance * math.sin(elevation)
+        target_altitude = alt1 + vertical_dist
+
+        target_latitude = math.degrees(lat2)
+        target_longitude = math.degrees(lon2)
+
+        self.target_pose = PoseStamped()
+        self.target_pose.header.stamp = self.get_clock().now().to_msg()
+        self.target_pose.pose.position.x = target_latitude
+        self.target_pose.pose.position.y = target_longitude
+        self.target_pose.pose.position.z = target_altitude
 
     def save_vel_data(self, x, y):
         self.x_speed = x
         self.y_speed = y
 
-    def move_callback(self):
-        if self.x_speed == 0.0 and self.y_speed == 0.0:
-            self.get_logger().info("No movement required.")
-            return
-        
-        msg = TwistStamped()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.twist.linear.x = self.x_speed
-        msg.twist.linear.y = self.y_speed
-        self.vel_publisher.publish(msg)
+    def move_callback(self):  
+        self.target_pose.header.stamp = self.get_clock().now().to_msg()
+        self.pose_publisher.publish(self.target_pose)
 
     def save_imu_data(self, msg):
         self.imu_data = msg
