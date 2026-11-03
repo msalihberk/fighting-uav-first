@@ -62,13 +62,24 @@ class UAVMovement(Node):
 
         self.circle_speed = 0.5
         self.circle_time = 0.0
+        self.loss_time = 0.0
+        self.reseted = False
 
     def save_gps_data(self, msg):
         self.current_gps = msg
 
     def get_coordinates(self, msg: CamData):
-        if self.locked and not msg.found:
-            return
+        if not msg.found:
+            if not self.locked:
+                self.loss_time = self.get_clock().now().nanoseconds / 1e9 - self.loss_time
+                self.circle()
+            else:
+                if self.reseted:
+                    return
+                if self.get_clock().now().nanoseconds / 1e9 - self.loss_time > 5.0:
+                    self.k_filter = KalmanFilter(dim_x=4, dim_z=2)
+                    self.reseted = True
+
         angle_error_yaw = 0.0
         angle_error_pitch = 0.0
 
@@ -76,26 +87,15 @@ class UAVMovement(Node):
 
         if msg.found:
             self.locked = False
+            self.reseted = False
             observation = np.array([[float(msg.center_x)], [float(msg.center_y)]])
             self.k_filter.update(observation)
-
-            request = Velocity.Request()
-            request.width = msg.width
-            request.height = msg.height
-            request.img_width = msg.img_width
-            request.img_height = msg.img_height
-
-            future = self.vel_calculation.call_async(request)
-            rclpy.spin_until_future_complete(self, future)
-
-            if future.result() is not None:
-                response = future.result()
-                self.save_vel_data(response.vel.linear.x, response.vel.linear.y)
-            else:
-                self.get_logger().error("Failed to call service for velocity calculation.")
+            self.get_logger().warn(f"Target Found: {msg.center_x}, {msg.center_y}")
 
         p_x = self.k_filter.x[0, 0]
         p_y = self.k_filter.x[1, 0]
+
+        self.get_logger().info(f"Kalman Filter Prediction: {p_x}, {p_y}")
 
         pixel_data_yaw = lambda x: MathFuncs.calculate_angle_error(x, msg.img_width)
         angle_error_yaw = pixel_data_yaw(msg.center_x) if msg.found else pixel_data_yaw(p_x)
@@ -143,7 +143,7 @@ class UAVMovement(Node):
             self.circle_time = self.get_clock().now().nanoseconds / 1e9
             self.locked = True
 
-        r = 5.0
+        r = 1.0
         x_center = self.current_gps.latitude - r
         y_center = self.current_gps.longitude
 
@@ -158,6 +158,7 @@ class UAVMovement(Node):
 
     def move_callback(self):  
         self.target_pose.header.stamp = self.get_clock().now().to_msg()
+        self.get_logger().info(f"Publishing Target Pose: {self.target_pose.pose.position.x}, {self.target_pose.pose.position.y}, {self.target_pose.pose.position.z}")
         self.pose_publisher.publish(self.target_pose)
 
     def save_imu_data(self, msg):
