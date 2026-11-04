@@ -2,7 +2,7 @@ import math
 from custom_interfaces.msg import CamData
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import PoseStamped
+from mavros_msgs.msg import GlobalPositionTarget
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Imu, NavSatFix
 from custom_interfaces.srv import Velocity
@@ -17,9 +17,9 @@ class UAVMovement(Node):
         super().__init__("UAVMovement")
 
         self.pose_publisher = self.create_publisher(
-            PoseStamped, 
-            "/mavros/setpoint_position/local", 
-            10
+            GlobalPositionTarget, 
+            "/mavros/setpoint_raw/global", 
+            qos_profile=qos_profile_sensor_data
         )
 
         self.imu_subscripter = self.create_subscription(
@@ -43,8 +43,6 @@ class UAVMovement(Node):
             qos_profile=qos_profile_sensor_data
         )
 
-        self.vel_calculation = self.create_client(Velocity, TopicNames.GET_VEL_VALUES)
-
         self.timer_period = 0.1
         self.move_timer = self.create_timer(self.timer_period, self.move_callback)
         self.imu_data = Imu()
@@ -57,7 +55,20 @@ class UAVMovement(Node):
 
         self.k_filter = KalmanFilter(dim_x=4, dim_z=2)
 
-        self.target_pose = PoseStamped()
+        self.target_pose = GlobalPositionTarget()
+        self.target_pose.coordinate_frame = GlobalPositionTarget.FRAME_GLOBAL_REL_ALT
+        self.target_pose.header.frame_id = "map"
+        self.target_pose.type_mask = (
+            GlobalPositionTarget.IGNORE_VX |
+            GlobalPositionTarget.IGNORE_VY |
+            GlobalPositionTarget.IGNORE_VZ |
+            GlobalPositionTarget.IGNORE_AFX |
+            GlobalPositionTarget.IGNORE_AFY |
+            GlobalPositionTarget.IGNORE_AFZ |
+            GlobalPositionTarget.IGNORE_YAW |
+            GlobalPositionTarget.IGNORE_YAW_RATE
+        )
+
         self.locked = False
 
         self.circle_speed = 0.5
@@ -127,19 +138,18 @@ class UAVMovement(Node):
                                  math.cos(horizontal_dist / R) - math.sin(lat1) * math.sin(lat2))
 
         vertical_dist = virtual_distance * math.sin(elevation)
-        target_altitude = alt1 + vertical_dist
+        target_altitude = alt1
 
         target_latitude = math.degrees(lat2)
         target_longitude = math.degrees(lon2)
 
-        self.target_pose = PoseStamped()
         self.target_pose.header.stamp = self.get_clock().now().to_msg()
-        self.target_pose.pose.position.x = target_latitude
-        self.target_pose.pose.position.y = target_longitude
-        self.target_pose.pose.position.z = target_altitude
+        self.target_pose.latitude = target_latitude
+        self.target_pose.longitude = target_longitude
+        self.target_pose.altitude = target_altitude
 
     def circle(self):
-        if not self.locked:
+        """ if not self.locked:
             self.circle_time = self.get_clock().now().nanoseconds / 1e9
             self.locked = True
 
@@ -152,13 +162,16 @@ class UAVMovement(Node):
         x = x_center + r * math.cos(elapsed_time * self.circle_speed)
         y = y_center + r * math.sin(elapsed_time * self.circle_speed)
 
-        self.target_pose.pose.position.x = x
-        self.target_pose.pose.position.y = y
-        self.target_pose.pose.position.z = self.current_gps.altitude
+        self.target_pose.latitude = x
+        self.target_pose.longitude = y
+        self.target_pose.altitude = self.current_gps.altitude """
+        pass
 
-    def move_callback(self):  
+    def move_callback(self):
+        if self.current_gps.latitude == 0.0 and self.current_gps.longitude == 0.0:
+            return
         self.target_pose.header.stamp = self.get_clock().now().to_msg()
-        self.get_logger().info(f"Publishing Target Pose: {self.target_pose.pose.position.x}, {self.target_pose.pose.position.y}, {self.target_pose.pose.position.z}")
+        self.get_logger().info(f"Publishing Target Pose: {self.target_pose.latitude}, {self.target_pose.longitude}, {self.target_pose.altitude}")
         self.pose_publisher.publish(self.target_pose)
 
     def save_imu_data(self, msg):
