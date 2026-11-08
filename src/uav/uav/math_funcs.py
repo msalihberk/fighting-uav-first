@@ -46,7 +46,6 @@ class MathFuncs:
     def calculate_angle_error(center_x, img_width):
         pixel_error = center_x - (img_width / 2.0)
         angle = pixel_error / img_width * 1.047
-        angle *= -1
 
         return math.degrees(angle)
 

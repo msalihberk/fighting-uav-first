@@ -10,18 +10,18 @@ from uav.pid_controller import PIDController
 from uav.topic_names import TopicNames
 from uav.math_funcs import MathFuncs
 from uav.kalman_filter import KalmanFilter
+from geographic_msgs.msg import GeoPoseStamped
+from mavros_msgs.srv import CommandInt
 import numpy as np
 
 class UAVMovement(Node):
     def __init__(self):
         super().__init__("UAVMovement")
 
-        self.pose_publisher = self.create_publisher(
-            GlobalPositionTarget, 
-            "/mavros/setpoint_raw/global", 
-            qos_profile=qos_profile_sensor_data
+        self.pose_client = self.create_client(
+            CommandInt, 
+            "/mavros/cmd/command_int", 
         )
-
         self.imu_subscripter = self.create_subscription(
             Imu,
             "/mavros/imu/data",
@@ -55,20 +55,6 @@ class UAVMovement(Node):
 
         self.k_filter = KalmanFilter(dim_x=4, dim_z=2)
 
-        self.target_pose = GlobalPositionTarget()
-        self.target_pose.coordinate_frame = GlobalPositionTarget.FRAME_GLOBAL_REL_ALT
-        self.target_pose.header.frame_id = "map"
-        self.target_pose.type_mask = (
-            GlobalPositionTarget.IGNORE_VX |
-            GlobalPositionTarget.IGNORE_VY |
-            GlobalPositionTarget.IGNORE_VZ |
-            GlobalPositionTarget.IGNORE_AFX |
-            GlobalPositionTarget.IGNORE_AFY |
-            GlobalPositionTarget.IGNORE_AFZ |
-            GlobalPositionTarget.IGNORE_YAW |
-            GlobalPositionTarget.IGNORE_YAW_RATE
-        )
-
         self.locked = False
 
         self.circle_speed = 0.5
@@ -76,6 +62,24 @@ class UAVMovement(Node):
         self.loss_time = 0.0
         self.reseted = False
 
+    def prepare_pose_command(self, x: float, y: float, z: float) -> CommandInt:
+        request = CommandInt.Request()
+        request.broadcast = False
+        request.frame = 3
+        request.command = 192
+        request.current = 0
+        request.autocontinue = 0
+        request.param1 = -1.0
+        request.param2 = 1.0
+        request.param3 = 0.0
+        request.param4 = 0.0
+
+        request.x = x
+        request.y = y
+        request.z = z
+
+        return request
+    
     def save_gps_data(self, msg):
         self.current_gps = msg
 
@@ -137,16 +141,12 @@ class UAVMovement(Node):
         lon2 = lon1 + math.atan2(math.sin(bearing) * math.sin(horizontal_dist / R) * math.cos(lat1),
                                  math.cos(horizontal_dist / R) - math.sin(lat1) * math.sin(lat2))
 
+        x = int(math.degrees(lat2) * 1e7)
+        y = int(math.degrees(lon2) * 1e7)
         vertical_dist = virtual_distance * math.sin(elevation)
-        target_altitude = alt1
+        z = alt1 + vertical_dist 
 
-        target_latitude = math.degrees(lat2)
-        target_longitude = math.degrees(lon2)
-
-        self.target_pose.header.stamp = self.get_clock().now().to_msg()
-        self.target_pose.latitude = target_latitude
-        self.target_pose.longitude = target_longitude
-        self.target_pose.altitude = target_altitude
+        self.move_to(x, y, z)
 
     def circle(self):
         """ if not self.locked:
@@ -170,9 +170,10 @@ class UAVMovement(Node):
     def move_callback(self):
         if self.current_gps.latitude == 0.0 and self.current_gps.longitude == 0.0:
             return
-        self.target_pose.header.stamp = self.get_clock().now().to_msg()
-        self.get_logger().info(f"Publishing Target Pose: {self.target_pose.latitude}, {self.target_pose.longitude}, {self.target_pose.altitude}")
-        self.pose_publisher.publish(self.target_pose)
+
+    def move_to(self, x: float, y: float, z: float):
+        request = self.prepare_pose_command(x, y, z)
+        self.pose_client.call_async(request)
 
     def save_imu_data(self, msg):
         self.imu_data = msg

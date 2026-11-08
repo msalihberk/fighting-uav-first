@@ -47,10 +47,4 @@ class PIDController:
         self.prev_d = d_value
 
         return p_value + i_value + d_value
-
-    def predict(self):
-        value = self.last_output + self.prev_d
-        self.last_output = value
-
-        return value
     
