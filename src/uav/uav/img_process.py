@@ -10,15 +10,15 @@ import os
 from ultralytics import YOLO
 import cv_bridge
 import cv2
+from pynput import keyboard
 
 class UAVImageProcessor(Node):
-    def __init__(self):
+    def __init__(self, _use_cam = True):
         super().__init__('UAVImageProcessor')
 
         package_share_dir = get_package_share_directory('uav')
         
-        model_path = os.path.join(package_share_dir, 'models', 'model.pt')
-        model_path = "./model.pt"
+        model_path = "./model.pt" if _use_cam else os.path.join(package_share_dir, 'models', 'model.pt') 
 
         self.model = YOLO(model_path)
 
@@ -31,6 +31,11 @@ class UAVImageProcessor(Node):
         self.yolo_size = [640, 640]
 
         self.min_confident = 0.5
+
+        if _use_cam:
+            self.cap = cv2.VideoCapture(0)
+
+        self._use_cam = _use_cam
 
     def get_data(self, center_x: float, center_y: float, width: float, 
                  height: float, img_height: float, img_width: float, found: bool):
@@ -97,11 +102,17 @@ class UAVImageProcessor(Node):
 
 
     def process(self, msg):
-        frame = cv_bridge.CvBridge().imgmsg_to_cv2(msg)
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        if not self._use_cam:
+            frame = cv_bridge.CvBridge().imgmsg_to_cv2(msg)
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        else:
+            ret, frame = self.cap.read()
+            if not ret:
+                return
         
         yolo_frame, proportion, fills = self.letterbox(frame, self.yolo_size)
-        results = self.model.predict(frame, verbose=False)
+        results = self.model.predict(yolo_frame, verbose=False)
 
         data_msg = self.empty_data()
 
@@ -110,7 +121,7 @@ class UAVImageProcessor(Node):
         data_msg.img_height = float(img_height)
         data_msg.img_width = float(img_width)
 
-        if len(results) > 0:
+        if len(results) > 0 or 1:
             result = results[0]
             
             target_boxes = [b for b in result.boxes if int(b.cls) == self.target_class]

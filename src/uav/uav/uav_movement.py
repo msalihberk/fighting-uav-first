@@ -18,7 +18,7 @@ from uav.kalman_filter import KalmanFilter
 class UAVMovement(Node):
     LOSS_TIMEOUT = 5.0
     CAM_STALE_TIMEOUT = 0.5
-    VIRTUAL_DISTANCE = 100.0
+    VIRTUAL_DISTANCE = 400.0
     MIN_ALT = 20.0
     EARTH_R = 6378137.0        # m (WGS-84)
 
@@ -172,6 +172,8 @@ class UAVMovement(Node):
             f"bearing={math.degrees(bearing):.1f} elev={math.degrees(elevation):.1f} "
             f"z={z:.1f}",
             throttle_duration_sec=0.5)
+
+        self.get_logger().info(f"X: {int(math.degrees(lat2) * 1e7)} Y: {int(math.degrees(lon2) * 1e7)} Z: {z}")
 
         return int(math.degrees(lat2) * 1e7), int(math.degrees(lon2) * 1e7), z
 
