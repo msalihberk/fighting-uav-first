@@ -12,6 +12,7 @@ install/*
 .parm
 .tlog
 .raw
+terrain/
 msg_gen/
 srv_gen/
 .vscode/
