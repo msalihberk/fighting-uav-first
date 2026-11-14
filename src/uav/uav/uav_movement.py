@@ -18,7 +18,7 @@ from uav.kalman_filter import KalmanFilter
 class UAVMovement(Node):
     LOSS_TIMEOUT = 5.0
     CAM_STALE_TIMEOUT = 0.5
-    VIRTUAL_DISTANCE = 400.0
+    VIRTUAL_DISTANCE = 150.0
     MIN_ALT = 20.0
     EARTH_R = 6378137.0        # m (WGS-84)
 
@@ -127,7 +127,7 @@ class UAVMovement(Node):
             if now - self.last_seen_time > self.LOSS_TIMEOUT:
                 self.filter_initialized = False
                 self.target_valid = False
-                self.circle()
+                self.find_target()
                 return
 
             self.k_filter.predict()
@@ -196,7 +196,7 @@ class UAVMovement(Node):
         self.pose_future = self.pose_client.call_async(
             self.prepare_pose_command(x, y, z))
 
-    def circle(self):
+    def find_target(self):
         pass
 
 

@@ -7,6 +7,11 @@ bin/
 lib/
 log/*
 install/*
+.DAT
+.bin
+.parm
+.tlog
+.raw
 msg_gen/
 srv_gen/
 .vscode/

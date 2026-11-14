@@ -10,10 +10,9 @@ import os
 from ultralytics import YOLO
 import cv_bridge
 import cv2
-from pynput import keyboard
 
 class UAVImageProcessor(Node):
-    def __init__(self, _use_cam = True):
+    def __init__(self, _use_cam = False):
         super().__init__('UAVImageProcessor')
 
         package_share_dir = get_package_share_directory('uav')
